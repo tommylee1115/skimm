@@ -1,0 +1,25 @@
+appId: com.skimm.reader
+productName: Skimm
+directories:
+  buildResources: resources
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintrc.cjs,.prettierrc.yaml,.prettierignore,tsconfig.*.json,tsconfig.json}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!nanobanana-output/*'
+win:
+  icon: resources/icon.ico
+  target: nsis
+mac:
+  icon: resources/icon.icns
+  category: public.app-category.productivity
+linux:
+  icon: resources/icon.png
+  category: Office
+publish:
+  provider: github
+  owner: tommylee1115
+  repo: skimm
+  releaseType: release
