@@ -60,20 +60,27 @@ Tiny habit, pays off when you want to remember what shipped. Keep it human-reada
 - Fixed workspace persistence across restarts
 ```
 
-### 4. Rebuild and repackage
+### 4. Rebuild and publish
 
 ```bash
-npm run build && npm run package
+npm run build && GH_TOKEN=<your-token> npm run package -- --publish always
 ```
 
-New installer lands at `dist/Skimm Setup 0.1.1.exe`.
+This builds the installer **and** pushes it to GitHub Releases automatically.
+New installer lands at `dist/Skimm Setup <version>.exe` locally, and a GitHub
+Release tagged `v<version>` is created with:
 
-### 5. Distribute
+- `Skimm-Setup-<version>.exe` — the installer
+- `Skimm-Setup-<version>.exe.blockmap` — block map for delta updates
+- `latest.yml` — version manifest the auto-updater reads
 
-- Upload the new `.exe` to Google Drive / Dropbox / WeTransfer
-- Send the link to your friend
-- Tell them to run the new installer — NSIS detects the existing install and
-  replaces the old version **in place**. No uninstall needed.
+Users who already have Skimm installed will see the **"A new version is ready —
+Restart to update"** banner automatically. No manual distribution needed.
+
+### 5. First-time install (share the exe directly)
+
+For users who don't have Skimm yet, share the `.exe` from `dist/` or from the
+GitHub Release page. After that first install, all future updates are automatic.
 
 ### 6. First-run warning (unsigned builds)
 
@@ -109,33 +116,32 @@ Windows → Settings → Apps → Skimm → Uninstall.
 
 To also wipe user data, manually delete `%APPDATA%\skimm\` after uninstalling.
 
-## Future: auto-updates via `electron-updater`
+## Auto-updates (implemented)
 
-Currently updates are **manual** — you send a new `.exe`, friend runs it.
-To give users the "new version available" toast like Notion / VSCode:
+Auto-updates are live via `electron-updater` + GitHub Releases:
 
-1. `npm install electron-updater`
-2. In `src/main/index.ts`, on app ready:
-   ```ts
-   import { autoUpdater } from 'electron-updater'
-   autoUpdater.checkForUpdatesAndNotify()
-   ```
-3. Host the installer + the `latest.yml` file (electron-builder already
-   generates this alongside the `.exe`) somewhere reachable:
-   - **GitHub Releases** (free, recommended) — add `publish` config to
-     `electron-builder.yml`
-   - S3 / Azure blob / custom server
-4. Add the publish config to `electron-builder.yml`:
-   ```yaml
-   publish:
-     provider: github
-     owner: <your-username>
-     repo: skimm
-   ```
-5. Push a release with `npm run build && npm run package && npx electron-builder --publish always`
+- On launch, the app silently checks `https://github.com/tommylee1115/skimm/releases`
+  for a newer `latest.yml`.
+- If a new version exists, it downloads in the background.
+- When the download finishes, a **"A new version is ready — Restart to update"**
+  banner appears at the bottom-right of the window.
+- Clicking "Restart to update" runs `autoUpdater.quitAndInstall()` — the new
+  version is installed and the app relaunches.
 
-**Caveat:** auto-updater works on Windows without code signing, but **macOS
-requires signing** for auto-updates to work at all.
+**GH_TOKEN** is required only at publish time (your machine), never at runtime.
+Store it in your shell profile or password manager:
+```bash
+# in ~/.bashrc or ~/.zshrc
+export GH_TOKEN=ghp_...
+```
+
+Then the release command simplifies to:
+```bash
+npm run build && npm run package -- --publish always
+```
+
+**Caveat:** auto-updater works on Windows without code signing. macOS requires
+signing for auto-updates; skip macOS targets until then.
 
 ## Handy paths
 
