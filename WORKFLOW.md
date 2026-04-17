@@ -26,24 +26,37 @@ workflow, delete it.
 1. Make code changes and test with `npm run dev`
 2. Bump version in `package.json` (e.g. `0.2.1` → `0.2.2`)
 3. Add entry to `CHANGELOG.md`
-4. Build and publish:
+4. Build and publish — one command:
 
-   **PowerShell 7+** (Windows default terminal):
+   ```bash
+   npm run ship
+   ```
+
+   This runs `scripts/ship.mjs`, which:
+   - Pulls your GitHub token from the `gh` CLI's OS keychain store
+   - Builds the app (`electron-vite build`)
+   - Packages + publishes to GitHub Releases (`electron-builder
+     --win --publish always`)
+
+   The token is injected into the child process env only for the
+   duration of the build and package commands — never touches disk,
+   never persists in your shell session, never gets logged. If the
+   token fetch fails, the script exits before building so you can
+   fix auth first.
+
+   **Manual equivalent** (if `npm run ship` isn't available or you
+   want to debug a specific step):
+
+   *PowerShell 7+:*
    ```powershell
    $env:GH_TOKEN = gh auth token
    npm run build && npm run package -- --publish always
    ```
 
-   **bash / zsh** (Git Bash, WSL, macOS):
+   *bash / zsh:*
    ```bash
    GH_TOKEN=$(gh auth token) npm run build && GH_TOKEN=$(gh auth token) npm run package -- --publish always
    ```
-
-   Either way, `gh auth token` pulls the token from the OS keychain only
-   for this shell — nothing on disk, nothing in shell history. The
-   PowerShell variant sets `$env:GH_TOKEN` in the current session; close
-   the window to clear it, or run `Remove-Item Env:\GH_TOKEN` to clear
-   it sooner.
 
 That's it. A GitHub Release is created automatically with the installer and
 update manifest. Users with Skimm installed will see the **"Restart to update"**

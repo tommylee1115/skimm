@@ -16,7 +16,8 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "ship": "node scripts/ship.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",

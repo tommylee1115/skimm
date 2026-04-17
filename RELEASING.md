@@ -60,21 +60,29 @@ Tiny habit, pays off when you want to remember what shipped. Keep it human-reada
 - Fixed workspace persistence across restarts
 ```
 
-### 4. Rebuild and publish
+### 4. Rebuild and publish — one command
 
-**PowerShell 7+** (Windows default):
+```bash
+npm run ship
+```
+
+Runs `scripts/ship.mjs` which reads the GitHub token from the `gh`
+CLI's OS keychain (set up once via `gh auth login`), builds the app,
+and publishes to GitHub Releases. No plaintext `.env` file required,
+no token in shell history.
+
+**Manual equivalent** if you need to debug a specific step:
+
 ```powershell
+# PowerShell 7+
 $env:GH_TOKEN = gh auth token
 npm run build && npm run package -- --publish always
 ```
 
-**bash / zsh** (Git Bash, WSL, macOS):
 ```bash
+# bash / zsh
 GH_TOKEN=$(gh auth token) npm run build && GH_TOKEN=$(gh auth token) npm run package -- --publish always
 ```
-
-`gh auth token` reads from the OS keychain (set up once via `gh auth login`)
-so no plaintext `.env` file is required.
 
 This builds the installer **and** pushes it to GitHub Releases automatically.
 New installer lands at `dist/Skimm Setup <version>.exe` locally, and a GitHub
