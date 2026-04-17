@@ -1,5 +1,16 @@
 # Skimm Changelog
 
+## 0.7.0 — 2026-04-16
+
+### Added
+
+- **Outline sidebar.** New icon in the sidebar (tree icon, between Files and Study Cards) opens a live table-of-contents for the active markdown file. All `#`–`######` headings show up as a nested, clickable outline — click any entry to smooth-scroll the reading pane to that section. Nesting is normalized to the shallowest heading in the doc, so a file that starts at `##` still sits flush left. Headings inside fenced code blocks are correctly ignored.
+- **Stable heading IDs.** `rehype-slug` is now in the markdown pipeline, giving every rendered heading a deterministic `id="..."` matching the outline's click target. The same `github-slugger` algorithm is used in both places so IDs always resolve.
+
+### Fixed
+
+- N/A — outline is purely additive.
+
 ## 0.6.0 — 2026-04-16
 
 ### Added

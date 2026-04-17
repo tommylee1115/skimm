@@ -2,6 +2,7 @@ import type { SidebarView } from './IconBar'
 import { SettingsPanel } from '@/components/sidebar/SettingsPanel'
 import { StudyPanel } from '@/components/sidebar/StudyPanel'
 import { FilesPanel } from '@/components/sidebar/FilesPanel'
+import { TocPanel } from '@/components/sidebar/TocPanel'
 
 interface SidebarProps {
   view: SidebarView
@@ -37,12 +38,14 @@ export function Sidebar({ view, open, width }: SidebarProps) {
         }}
       >
         {view === 'files' && 'Explorer'}
+        {view === 'toc' && 'Outline'}
         {view === 'study' && 'Study Cards'}
         {view === 'settings' && 'Settings'}
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 pt-2">
         {view === 'files' && <FilesPanel />}
+        {view === 'toc' && <TocPanel />}
         {view === 'study' && <StudyPanel />}
         {view === 'settings' && <SettingsPanel />}
       </div>

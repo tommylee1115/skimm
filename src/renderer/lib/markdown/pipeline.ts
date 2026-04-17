@@ -12,6 +12,7 @@ import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkRehype from 'remark-rehype'
+import rehypeSlug from 'rehype-slug'
 import rehypeKatex from 'rehype-katex'
 import rehypeReact from 'rehype-react'
 import { createElement, Fragment } from 'react'
@@ -37,6 +38,8 @@ export function processMarkdown(
   //   remarkMath     — recognise $...$ / $$...$$ in mdast
   //   remarkChunk    — optional paragraph/clause splitter
   //   remarkRehype   — lower to hast
+  //   rehypeSlug     — add stable id="..." to every heading (used by the
+  //                    TOC sidebar's click-to-scroll)
   //   rehypeKatex    — expand math nodes into full KaTeX HTML
   //   rehypeClickable — wrap words in <span data-word> for clicks+TTS
   //                    (skips katex subtrees so math spans stay intact)
@@ -46,6 +49,7 @@ export function processMarkdown(
     .use(remarkMath)
     .use(remarkChunk, { level: chunkingLevel })
     .use(remarkRehype)
+    .use(rehypeSlug)
     .use(rehypeKatex)
     .use(rehypeClickable)
 

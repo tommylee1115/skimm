@@ -1,7 +1,7 @@
-import { Files, Settings, Sun, Moon, BookOpen } from 'lucide-react'
+import { Files, Settings, Sun, Moon, BookOpen, ListTree } from 'lucide-react'
 import { useReaderStore } from '@/stores/reader.store'
 
-export type SidebarView = 'files' | 'study' | 'settings'
+export type SidebarView = 'files' | 'toc' | 'study' | 'settings'
 
 interface IconBarProps {
   activeView: SidebarView
@@ -46,6 +46,15 @@ export function IconBar({ activeView, onViewChange, sidebarOpen, onToggleSidebar
         aria-pressed={activeView === 'files' && sidebarOpen}
       >
         <Files size={20} />
+      </button>
+      <button
+        className={iconClass('toc')}
+        onClick={() => handleClick('toc')}
+        title="Outline"
+        aria-label="Outline"
+        aria-pressed={activeView === 'toc' && sidebarOpen}
+      >
+        <ListTree size={20} />
       </button>
       <button
         className={iconClass('study')}
