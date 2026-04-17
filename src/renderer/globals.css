@@ -19,47 +19,71 @@
 /*
  * KaTeX compatibility shim.
  *
- * Tailwind v4's preflight applies `box-sizing: border-box` and
- * `border: 0 solid` to every element (`*, ::before, ::after`). Both
- * globals clash with KaTeX's layout engine:
+ * Tailwind v4's preflight applies the following to EVERY element,
+ * including pseudo-elements:
+ *   *, ::before, ::after {
+ *     box-sizing: border-box;
+ *     margin: 0;
+ *     padding: 0;
+ *     border: 0 solid;
+ *   }
  *
- *   1. KaTeX's vlist / fraction / accent positioning math assumes the
- *      browser default `box-sizing: content-box`. Under `border-box`,
- *      internal heights include padding and the numerator/denominator
- *      drift apart.
- *   2. KaTeX draws the fraction bar via `border-bottom-width: 0.04em`
- *      on `.frac-line`. Tailwind's `border: 0 solid` zeroes out the
- *      width property on every descendant that doesn't explicitly set
- *      it, making the bar vanish.
+ * Each one breaks a different piece of KaTeX:
  *
- * Scoping to `.katex, .katex *` (both inline and display math) restores
- * the browser defaults KaTeX expects without affecting any other UI.
- * `revert` falls back to the browser's built-in stylesheet value for
- * each property, letting KaTeX's own CSS take precedence.
+ *   - box-sizing: border-box — KaTeX's `.vlist` layout uses
+ *     `display: inline-table` / `table-row` / `table-cell`. Under
+ *     border-box, table-cell widths/heights include borders and the
+ *     numerator/denominator stacking drifts apart.
+ *   - margin: 0 — KaTeX sets `.vlist-t2 { margin-right: -2px }` for
+ *     pixel-accurate column alignment. Tailwind's lower-specificity
+ *     `* { margin: 0 }` doesn't technically override it, but any
+ *     nested margin KaTeX implicitly relied on from the UA table
+ *     stylesheet gets zeroed.
+ *   - padding: 0 — same reasoning; some internal struts rely on the
+ *     UA default.
+ *   - border: 0 solid — `.frac-line` uses `border-bottom-style: solid`
+ *     with inline `border-bottom-width: 0.04em`. Tailwind's width: 0
+ *     at lower specificity doesn't break this (KaTeX's rule wins on
+ *     specificity), but when KaTeX emits `.stretchy::before` and
+ *     `.eqn-num::before` rules, those pseudo-elements DO get Tailwind's
+ *     `::before { border: 0 solid }` applied directly, flattening the
+ *     decorations.
+ *
+ * Fix: revert all four properties inside `.katex`, `.katex-display`,
+ * AND their pseudo-elements. Keep the rest of the cascade intact so
+ * `.katex-mathml`'s `position: absolute; clip: rect(1px,1px,1px,1px)`
+ * still hides the screen-reader MathML twin — losing that is what
+ * causes the "hyposthesized" character-doubling ghost effect we saw
+ * earlier.
  */
 .katex,
 .katex *,
+.katex::before,
+.katex::after,
+.katex *::before,
+.katex *::after,
 .katex-display,
-.katex-display * {
+.katex-display *,
+.katex-display::before,
+.katex-display::after,
+.katex-display *::before,
+.katex-display *::after {
   box-sizing: content-box;
   border-width: revert;
   border-style: revert;
+  margin: revert;
+  padding: revert;
 }
 
 /*
  * The reader pane sets `line-height: 1.8` via an inline style on
- * `.markdown-body` (see MainPane.tsx). That gets inherited by every
- * child including KaTeX spans, which ruins vertical metrics for
- * fractions, accents, and superscripts — numerators lift off, `\hat`
- * marks land on the wrong row. KaTeX's own stylesheet uses
- * `line-height: 1.2`; reinforce it explicitly at higher specificity
- * so the inherited 1.8 can't win.
+ * `.markdown-body` (MainPane.tsx). That cascades into `.katex` and
+ * ruins vertical metrics for fractions, accents, and superscripts —
+ * numerators lift off, `\hat` marks land on the wrong row. KaTeX's
+ * own stylesheet uses 1.2; reinforce it explicitly.
  */
 .katex {
   line-height: 1.2;
-}
-.katex-display {
-  line-height: normal;
 }
 
 :root {
