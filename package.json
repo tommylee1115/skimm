@@ -1,7 +1,7 @@
 {
   "name": "skimm",
   "productName": "Skimm",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "A markdown reading app that helps you read and understand better",
   "main": "./out/main/index.js",
   "author": "Tommy Lee",

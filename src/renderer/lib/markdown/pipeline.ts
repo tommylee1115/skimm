@@ -62,6 +62,16 @@ export function processMarkdown(
     jsx,
     jsxs,
     components: {
+      // KaTeX reaches us as a tree of <span> elements whose layout
+      // depends on inline `style` attributes (vlist heights, vertical
+      // shifts, negative margin-right, the fraction-bar border width,
+      // strut vertical-align, etc.). rehype-react parses those into a
+      // React-shaped `style` object and passes it through `props`, so
+      // we must forward it — dropping it collapses vlists to the
+      // baseline and makes fractions, subscripts, and accents land in
+      // the wrong rows. The click-to-explain wrapping lives on its own
+      // clickable-word spans (emitted by rehype-clickable, which skips
+      // katex subtrees) so we can keep that branch separate.
       span: (props: Record<string, unknown>) => {
         const {
           children,
@@ -102,7 +112,7 @@ export function processMarkdown(
           )
         }
 
-        return createElement('span', { className }, children)
+        return createElement('span', { className, ...domProps }, children)
       }
     }
   } as Parameters<typeof rehypeReact>[0])

@@ -1,5 +1,11 @@
 # Skimm Changelog
 
+## 0.7.2 — 2026-04-16
+
+### Fixed
+
+- **Math equations finally render correctly.** The real culprit behind the KaTeX layout breakage wasn't Tailwind's preflight — it was the custom `span` component in the markdown pipeline, which forwarded only `className` to React and silently dropped every inline `style` attribute KaTeX emits. KaTeX's entire layout depends on those: vlist row heights, `top:-X.XXem` vertical offsets for sub/superscripts and accents, `margin-right:-2px` for column alignment, `vertical-align` on struts, and the `border-bottom-width:0.04em` on `.frac-line` that draws the fraction bar itself. Without them, vlists collapsed to the baseline and `β̂_1 = β_1 + \frac{…}{…}` rendered as jumbled glyphs on stacked rows. The CSS shims shipped in 0.6.0 and 0.7.1 were neutralizing preflight side effects but couldn't restore values KaTeX only writes as inline `style`. Fix: forward all remaining rehype-react props on non-clickable-word spans. Added an SSR regression test that asserts `frac-line` keeps its border width, `vlist` keeps its height, and struts keep their vertical-align.
+
 ## 0.7.1 — 2026-04-16
 
 ### Fixed
