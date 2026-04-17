@@ -1,5 +1,13 @@
 # Skimm Changelog
 
+## 0.7.3 — 2026-04-16
+
+### Hardened
+
+- **Markdown pipeline now sanitizes content before rendering.** Added `rehype-sanitize` between `rehype-slug` and `rehype-katex` so any `javascript:` or `data:` URL slipped into a markdown link/image is dropped before it reaches React. The default schema preserves headings, code, lists, math passthrough class, and everything else the reader pane needs; KaTeX expansion runs on the post-sanitize tree so its inline styles and generated classes survive untouched. Defense-in-depth — `remark-rehype` defaults already stripped raw HTML, but a `data:text/html` URL in an `<a href>` could still execute on click since React's URL sanitizer doesn't catch those.
+- **Anthropic SDK moved from devDependencies to dependencies.** `claude.provider.ts` imports it at runtime, so the dev-only classification was a packaging trap waiting to break a future build.
+- **Internal release/debug docs removed from the public repo.** `ERROR-LOG.md`, `WORKFLOW.md`, and `RELEASING.md` are now gitignored — they describe internal tooling, not anything end users or the app itself need.
+
 ## 0.7.2 — 2026-04-16
 
 ### Fixed

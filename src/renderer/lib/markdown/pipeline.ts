@@ -13,6 +13,7 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkRehype from 'remark-rehype'
 import rehypeSlug from 'rehype-slug'
+import rehypeSanitize from 'rehype-sanitize'
 import rehypeKatex from 'rehype-katex'
 import rehypeReact from 'rehype-react'
 import { createElement, Fragment } from 'react'
@@ -37,9 +38,15 @@ export function processMarkdown(
   // Order matters:
   //   remarkMath     — recognise $...$ / $$...$$ in mdast
   //   remarkChunk    — optional paragraph/clause splitter
-  //   remarkRehype   — lower to hast
+  //   remarkRehype   — lower to hast (drops raw HTML by default)
   //   rehypeSlug     — add stable id="..." to every heading (used by the
   //                    TOC sidebar's click-to-scroll)
+  //   rehypeSanitize — defense-in-depth: even though remark-rehype already
+  //                    strips raw HTML, this also rejects javascript:/data:
+  //                    URLs in href/src that React's url-sanitizer might
+  //                    miss. Runs BEFORE rehype-katex so the trusted KaTeX
+  //                    HTML (with inline styles + non-default classes) is
+  //                    not subjected to the schema.
   //   rehypeKatex    — expand math nodes into full KaTeX HTML
   //   rehypeClickable — wrap words in <span data-word> for clicks+TTS
   //                    (skips katex subtrees so math spans stay intact)
@@ -50,6 +57,7 @@ export function processMarkdown(
     .use(remarkChunk, { level: chunkingLevel })
     .use(remarkRehype)
     .use(rehypeSlug)
+    .use(rehypeSanitize)
     .use(rehypeKatex)
     .use(rehypeClickable)
 

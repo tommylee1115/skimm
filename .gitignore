@@ -12,3 +12,9 @@ Thumbs.db
 
 # Nanobanana-generated brand assets — experimentation outputs, not source
 nanobanana-output/
+
+# Internal-only docs (release process, debug journal, dev workflow). Kept on
+# local disk for reference, not part of the public repo.
+ERROR-LOG.md
+WORKFLOW.md
+RELEASING.md
