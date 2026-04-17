@@ -11,6 +11,10 @@
 
 - Disabled-provider tooltip now points at Settings ("Add an OpenAI API key in Settings to enable neural TTS") instead of the classroom-specific file path.
 
+### Fixed
+
+- **Math equations now render correctly.** Tailwind v4's preflight applies `box-sizing: border-box` and `border: 0 solid` globally, which broke KaTeX's internal layout — fractions lost their horizontal bar, numerators and denominators drifted apart, `\hat` accents stacked below their letters. Added a scoped CSS shim in `globals.css` that restores `content-box` + `border revert` inside `.katex` subtrees, plus reinforces KaTeX's own `line-height: 1.2` against the reader's inherited `1.8`.
+
 ## 0.5.0 — 2026-04-16
 
 ### Added
