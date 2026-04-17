@@ -1,5 +1,12 @@
 # Skimm Changelog
 
+## 0.7.1 — 2026-04-16
+
+### Fixed
+
+- **Update banner is now visible.** The old "A new version is ready" toast used the cream `--bg-secondary` against the cream reading area (low contrast) and referenced an undefined CSS variable `--accent` for the button background (so "Restart to update" had no fill). Rebuilt on the brand accent brown with white text, a large white Restart button, a sparkles icon, and a subtle slide-up entry animation — it's now obvious even mid-reading.
+- **KaTeX layout shim widened.** Added pseudo-element coverage (`::before` / `::after`) and `margin: revert` + `padding: revert` to the scoped reset. Addresses stray subscript drop-offs, fraction numerator/denominator drift, and the `katex-mathml` screen-reader-twin leaking visually into the document.
+
 ## 0.7.0 — 2026-04-16
 
 ### Added

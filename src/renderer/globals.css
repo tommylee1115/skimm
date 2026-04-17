@@ -447,3 +447,16 @@ textarea:focus-visible,
   28% { transform: scale(1.15); }
   100% { transform: scale(1); }
 }
+
+/* Update banner — slide up from below with a soft fade so the user's
+   eye catches the motion even when they're deep in a reading flow. */
+@keyframes skimm-update-banner-in {
+  0% {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
