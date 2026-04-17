@@ -1,17 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
 import { MarkdownText } from '@/components/ai/MarkdownText'
-
-interface StudyCardData {
-  id: string
-  selected_text: string
-  selection_type: 'word' | 'phrase' | 'sentence'
-  explanation: string
-  language: string
-  context: string
-  source_file: string
-  saved_at: string
-}
+import type { StudyCard as StudyCardData } from '@shared/study.types'
 
 interface StudyCardModalProps {
   cards: StudyCardData[]

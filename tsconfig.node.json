@@ -3,10 +3,15 @@
   "include": [
     "electron.vite.config.*",
     "src/main/**/*",
-    "src/preload/**/*"
+    "src/preload/**/*",
+    "src/shared/**/*"
   ],
   "compilerOptions": {
     "composite": true,
-    "types": ["electron-vite/node"]
+    "types": ["electron-vite/node"],
+    // @tailwindcss/vite ships ESM-only and its types live in .d.mts.
+    // Bundler resolution lets tsc find them without demanding every
+    // import be extension-qualified.
+    "moduleResolution": "bundler"
   }
 }

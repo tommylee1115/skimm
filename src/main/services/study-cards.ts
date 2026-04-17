@@ -2,17 +2,9 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
+import type { StudyCard } from '../../shared/study.types'
 
-export interface StudyCard {
-  id: string
-  selected_text: string
-  selection_type: 'word' | 'phrase' | 'sentence'
-  explanation: string
-  language: string
-  context: string
-  source_file: string
-  saved_at: string
-}
+export type { StudyCard }
 
 let db: Database.Database | null = null
 

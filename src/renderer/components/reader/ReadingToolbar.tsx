@@ -127,6 +127,8 @@ function ExplainButton() {
       }}
       onClick={togglePanel}
       title={panelOpen ? 'Hide Explain panel (Ctrl+J)' : 'Show Explain panel (Ctrl+J)'}
+      aria-label={panelOpen ? 'Hide Explain panel' : 'Show Explain panel'}
+      aria-pressed={panelOpen}
     >
       <Sparkles size={12} />
       Explain
@@ -167,6 +169,8 @@ function PlayButton() {
       }}
       onClick={handleClick}
       title={transportVisible ? 'Stop reading' : 'Read aloud'}
+      aria-label={transportVisible ? 'Stop reading aloud' : 'Read aloud'}
+      aria-pressed={transportVisible}
     >
       <Play size={12} fill="currentColor" />
       Read
@@ -206,6 +210,7 @@ function ToolbarButton({
       }}
       onClick={onClick}
       title={title}
+      aria-label={title}
     >
       {children}
     </button>
@@ -238,6 +243,8 @@ function ToolbarToggle({
       }}
       onClick={onClick}
       title={title}
+      aria-label={title}
+      aria-pressed={active}
     >
       {children}
     </button>

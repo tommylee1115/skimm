@@ -1,15 +1,7 @@
 import { loadOpenAIKey } from './openai-key'
+import type { WhisperWord, WhisperResult } from '../../../shared/tts.types'
 
-export interface WhisperWord {
-  word: string
-  start: number // seconds
-  end: number
-}
-
-export interface WhisperResult {
-  words: WhisperWord[]
-  durationSec: number
-}
+export type { WhisperWord, WhisperResult }
 
 const WHISPER_ENDPOINT = 'https://api.openai.com/v1/audio/transcriptions'
 
@@ -44,7 +36,10 @@ export async function openAiTranscribe(audioBase64: string): Promise<WhisperResu
       Authorization: `Bearer ${key}`
       // Don't set Content-Type — fetch picks the multipart boundary automatically
     },
-    body: form
+    body: form,
+    // Hard 30s timeout — transcription is best-effort for word highlighting;
+    // if it hangs we don't want to block the audio playback path.
+    signal: AbortSignal.timeout(30_000)
   })
 
   if (!resp.ok) {

@@ -10,15 +10,36 @@ import type { Root, Element, Text, ElementContent } from 'hast'
 // Tags whose text content should NOT be made clickable
 const SKIP_TAGS = new Set(['code', 'pre', 'script', 'style', 'a'])
 
+/**
+ * Also skip anything inside a KaTeX-rendered subtree. rehype-katex emits
+ * nested spans with class names like `katex`, `katex-display`, `katex-html`,
+ * `katex-mathml` — treating the inner text as "words" would break the math
+ * layout and make TTS try to read bracket-matching glyphs.
+ */
+function isKatexElement(node: Element): boolean {
+  const cls = node.properties?.className
+  if (!cls) return false
+  const list = Array.isArray(cls) ? cls : [cls]
+  for (const c of list) {
+    if (typeof c === 'string' && (c === 'katex' || c.startsWith('katex-'))) {
+      return true
+    }
+  }
+  return false
+}
+
 export function rehypeClickable() {
   return (tree: Root) => {
     let globalOffset = 0
 
     function processNode(node: Root | Element): void {
-      if (node.type === 'element' && SKIP_TAGS.has((node as Element).tagName)) {
-        // Still count the text length for offset tracking
-        globalOffset += getTextLength(node)
-        return
+      if (node.type === 'element') {
+        const el = node as Element
+        if (SKIP_TAGS.has(el.tagName) || isKatexElement(el)) {
+          // Still count the text length for offset tracking
+          globalOffset += getTextLength(el)
+          return
+        }
       }
 
       const newChildren: ElementContent[] = []

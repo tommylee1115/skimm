@@ -44,11 +44,21 @@ function fileNameFromPath(path: string): string {
   return path.split(/[/\\]/).pop() || path
 }
 
+// Combined session blob. One IPC round-trip per tab operation instead of
+// two. Main's settings handler and file-access allow-list both accept the
+// new `session` key and the legacy `session.openFiles` / `session.activeFile`
+// keys, so old persisted state still restores cleanly on first run.
+interface SessionBlob {
+  openFiles: string[]
+  activeFile: string | null
+}
+
 function persistOpenFiles(files: OpenFile[], activeId: string | null): void {
-  const paths = files.map((f) => f.path)
-  const activePath = files.find((f) => f.id === activeId)?.path ?? null
-  window.api.settings.set('session.openFiles', paths)
-  window.api.settings.set('session.activeFile', activePath)
+  const session: SessionBlob = {
+    openFiles: files.map((f) => f.path),
+    activeFile: files.find((f) => f.id === activeId)?.path ?? null
+  }
+  window.api.settings.set('session', session)
 }
 
 function sortPaths(paths: string[]): string[] {
@@ -225,14 +235,28 @@ export const useFileStore = create<FileStore>((set, get) => ({
   },
 
   restoreSession: async () => {
-    const workspacePaths = (await window.api.settings.get('workspace.files')) as
-      | string[]
+    // One batch hydration. Also reads legacy `session.openFiles` /
+    // `session.activeFile` so existing installs still restore after the
+    // Phase 3.6 upgrade.
+    const persisted = await window.api.settings.getMany([
+      'workspace.files',
+      'workspace.folders',
+      'session',
+      'session.openFiles',
+      'session.activeFile'
+    ])
+
+    const workspacePaths = persisted['workspace.files'] as string[] | undefined
+    const savedFolders = persisted['workspace.folders'] as VirtualFolder[] | undefined
+    const sessionBlob = persisted['session'] as
+      | { openFiles?: string[]; activeFile?: string | null }
       | undefined
-    const savedFolders = (await window.api.settings.get('workspace.folders')) as
-      | VirtualFolder[]
-      | undefined
-    const openPaths = (await window.api.settings.get('session.openFiles')) as string[] | undefined
-    const activePath = (await window.api.settings.get('session.activeFile')) as string | undefined
+    const openPaths =
+      (sessionBlob?.openFiles as string[] | undefined) ??
+      (persisted['session.openFiles'] as string[] | undefined)
+    const activePath =
+      (sessionBlob?.activeFile ?? undefined) ??
+      (persisted['session.activeFile'] as string | undefined)
 
     if (workspacePaths && workspacePaths.length > 0) {
       set({ workspaceFiles: sortPaths(workspacePaths) })

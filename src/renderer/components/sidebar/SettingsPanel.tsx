@@ -1,7 +1,18 @@
 import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Check } from 'lucide-react'
+import { Eye, EyeOff, Check, RefreshCw, AlertTriangle, Download } from 'lucide-react'
 import { useTtsStore, type OpenAIVoice, type OpenAIModel } from '@/stores/tts.store'
 import { subscribeToVoiceChanges } from '@/lib/speech/web-speech'
+
+// Inline mirror of the preload type so the renderer's tsconfig doesn't
+// need to cross into src/preload. Source of truth: main/ipc/update.ts.
+type UpdateStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'up-to-date' }
+  | { state: 'available'; version: string }
+  | { state: 'downloading'; percent: number; version?: string }
+  | { state: 'downloaded' }
+  | { state: 'error'; message: string }
 
 function formatVoiceLabel(v: SpeechSynthesisVoice): string {
   const name = v.name.replace(/^Microsoft\s+/i, '').replace(/\s*-.*$/, '')
@@ -14,10 +25,24 @@ export function SettingsPanel() {
   const [saved, setSaved] = useState(false)
   const [appVersion, setAppVersion] = useState<string | null>(null)
 
+  // OpenAI key (for TTS) lives next to Claude — separate state so the
+  // password inputs and Save/Remove buttons don't share mutable UI state.
+  const [openaiKey, setOpenaiKey] = useState('')
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false)
+  const [openaiSaved, setOpenaiSaved] = useState(false)
+
+  // Lifted so `TtsSettings` immediately reflects a newly-saved OpenAI
+  // key in its provider toggle without waiting for a remount.
+  const [openaiAvailable, setOpenaiAvailable] = useState<boolean | null>(null)
+
   useEffect(() => {
     window.api.settings.get('apiKey').then((key) => {
       if (typeof key === 'string') setApiKey(key)
     })
+    window.api.settings.get('openaiApiKey').then((key) => {
+      if (typeof key === 'string') setOpenaiKey(key)
+    })
+    window.api.tts.openaiAvailable().then(setOpenaiAvailable).catch(() => setOpenaiAvailable(false))
     window.api.app.version().then(setAppVersion).catch(() => setAppVersion(null))
   }, [])
 
@@ -25,6 +50,20 @@ export function SettingsPanel() {
     await window.api.settings.set('apiKey', apiKey)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  const handleSaveOpenai = async () => {
+    await window.api.settings.set('openaiApiKey', openaiKey)
+    setOpenaiSaved(true)
+    setTimeout(() => setOpenaiSaved(false), 2000)
+    // Re-query after the write so the TTS provider toggle unlocks.
+    window.api.tts.openaiAvailable().then(setOpenaiAvailable).catch(() => {})
+  }
+
+  const handleRemoveOpenai = async () => {
+    setOpenaiKey('')
+    await window.api.settings.set('openaiApiKey', '')
+    window.api.tts.openaiAvailable().then(setOpenaiAvailable).catch(() => {})
   }
 
   return (
@@ -93,7 +132,79 @@ export function SettingsPanel() {
         </p>
       </div>
 
-      <TtsSettings />
+      {/* OpenAI API Key — powers neural TTS voices + Whisper word sync. */}
+      <div className="mb-6">
+        <label
+          className="block text-[11px] font-semibold uppercase tracking-wider mb-2"
+          style={{ color: 'var(--text-tertiary)' }}
+        >
+          OpenAI API Key
+          <span
+            className="ml-2 text-[10px] font-normal normal-case tracking-normal"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            for TTS (optional)
+          </span>
+        </label>
+        <div className="flex items-center gap-1.5 mb-2">
+          <input
+            type={showOpenaiKey ? 'text' : 'password'}
+            value={openaiKey}
+            onChange={(e) => setOpenaiKey(e.target.value)}
+            placeholder="sk-..."
+            className="flex-1 text-[12px] px-2.5 py-1.5 rounded border outline-none"
+            style={{
+              background: 'var(--bg-primary)',
+              color: 'var(--text-primary)',
+              borderColor: 'var(--border-primary)'
+            }}
+            aria-label="OpenAI API Key"
+          />
+          <button
+            className="w-7 h-7 flex items-center justify-center rounded cursor-pointer transition-colors"
+            style={{ color: 'var(--text-tertiary)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            onClick={() => setShowOpenaiKey(!showOpenaiKey)}
+            aria-label={showOpenaiKey ? 'Hide OpenAI API key' : 'Show OpenAI API key'}
+          >
+            {showOpenaiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSaveOpenai}
+            className="flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded border cursor-pointer transition-colors"
+            style={{
+              background: openaiSaved ? 'var(--bg-tertiary)' : 'transparent',
+              color: openaiSaved ? 'var(--text-primary)' : 'var(--text-secondary)',
+              borderColor: 'var(--border-primary)'
+            }}
+          >
+            {openaiSaved ? <><Check size={12} /> Saved</> : 'Save key'}
+          </button>
+          {openaiKey && (
+            <button
+              onClick={handleRemoveOpenai}
+              className="text-[12px] px-3 py-1.5 rounded border cursor-pointer transition-colors"
+              style={{
+                color: 'var(--text-muted)',
+                borderColor: 'var(--border-primary)',
+                background: 'transparent'
+              }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+        <p className="text-[11px] mt-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          Optional — enables high-quality neural TTS and Whisper word-sync highlighting. Get a key at platform.openai.com. Without it, Skimm uses your system's built-in voices. Stays on your machine, encrypted at rest.
+        </p>
+      </div>
+
+      <TtsSettings openaiAvailable={openaiAvailable} />
+
+      <UpdateSection />
 
       {/* App version footer */}
       <div
@@ -107,6 +218,141 @@ export function SettingsPanel() {
       </div>
     </div>
   )
+}
+
+/**
+ * Manual update check + live status. Subscribes to `update:status`
+ * events from main; the button triggers `update:check` which runs
+ * `autoUpdater.checkForUpdates()`.
+ */
+function UpdateSection() {
+  const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' })
+  const [lastChecked, setLastChecked] = useState<number | null>(null)
+
+  useEffect(() => {
+    window.api.update.onStatus((next) => {
+      setStatus(next)
+      if (next.state === 'up-to-date' || next.state === 'available' || next.state === 'error') {
+        setLastChecked(Date.now())
+      }
+    })
+  }, [])
+
+  const busy = status.state === 'checking' || status.state === 'downloading'
+
+  const handleCheck = async () => {
+    setStatus({ state: 'checking' })
+    try {
+      await window.api.update.check()
+    } catch {
+      /* main surfaces errors via onStatus */
+    }
+  }
+
+  return (
+    <div className="mb-6">
+      <label
+        className="block text-[11px] font-semibold uppercase tracking-wider mb-2"
+        style={{ color: 'var(--text-tertiary)' }}
+      >
+        Updates
+      </label>
+
+      <div className="flex items-center gap-2 mb-2">
+        <button
+          onClick={handleCheck}
+          disabled={busy}
+          className="flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded border cursor-pointer transition-colors"
+          style={{
+            color: busy ? 'var(--text-muted)' : 'var(--text-secondary)',
+            borderColor: 'var(--border-primary)',
+            background: 'transparent',
+            opacity: busy ? 0.6 : 1,
+            cursor: busy ? 'default' : 'pointer'
+          }}
+          aria-label="Check for updates"
+        >
+          <RefreshCw
+            size={12}
+            className={busy ? 'animate-spin' : ''}
+            strokeWidth={1.5}
+          />
+          {busy ? 'Checking…' : 'Check for updates'}
+        </button>
+        {status.state === 'downloaded' && (
+          <button
+            onClick={() => window.api.update.install()}
+            className="flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded cursor-pointer"
+            style={{
+              background: 'var(--accent-primary, #8B6F47)',
+              color: 'white',
+              border: 'none',
+              fontWeight: 600
+            }}
+            aria-label="Restart to install update"
+          >
+            <Download size={12} strokeWidth={2} />
+            Restart to install
+          </button>
+        )}
+      </div>
+
+      <div className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+        <UpdateStatusLine status={status} lastChecked={lastChecked} />
+      </div>
+    </div>
+  )
+}
+
+function UpdateStatusLine({
+  status,
+  lastChecked
+}: {
+  status: UpdateStatus
+  lastChecked: number | null
+}) {
+  switch (status.state) {
+    case 'checking':
+      return <span>Checking for updates…</span>
+    case 'up-to-date':
+      return (
+        <span>
+          You're on the latest version
+          {lastChecked ? ` · checked ${formatRelative(lastChecked)}` : ''}
+        </span>
+      )
+    case 'available':
+      return <span>Update available: v{status.version} — downloading…</span>
+    case 'downloading':
+      return <span>Downloading update… {status.percent}%</span>
+    case 'downloaded':
+      return <span style={{ color: 'var(--text-secondary)' }}>Ready to install — click Restart.</span>
+    case 'error':
+      return (
+        <span style={{ color: '#e57373', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <AlertTriangle size={11} />
+          {status.message}
+        </span>
+      )
+    case 'idle':
+    default:
+      return lastChecked ? (
+        <span>Last checked {formatRelative(lastChecked)}</span>
+      ) : (
+        <span>Checks automatically on launch. Click above to check now.</span>
+      )
+  }
+}
+
+function formatRelative(ts: number): string {
+  const diffSec = Math.floor((Date.now() - ts) / 1000)
+  if (diffSec < 10) return 'just now'
+  if (diffSec < 60) return `${diffSec}s ago`
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  return new Date(ts).toLocaleString()
 }
 
 const OPENAI_VOICES: { id: OpenAIVoice; label: string }[] = [
@@ -129,7 +375,7 @@ const OPENAI_MODELS: { id: OpenAIModel; label: string; hint: string }[] = [
   { id: 'gpt-4o-mini-tts', label: 'gpt-4o-mini-tts', hint: 'newest' }
 ]
 
-function TtsSettings() {
+function TtsSettings({ openaiAvailable }: { openaiAvailable: boolean | null }) {
   const ttsProvider = useTtsStore((s) => s.ttsProvider)
   const setProvider = useTtsStore((s) => s.setProvider)
   const selectedVoice = useTtsStore((s) => s.selectedVoice)
@@ -145,13 +391,8 @@ function TtsSettings() {
 
   const [webVoices, setWebVoices] = useState<SpeechSynthesisVoice[]>([])
   const [webFilter, setWebFilter] = useState<'en' | 'ko' | 'local' | 'all'>('en')
-  const [openaiAvailable, setOpenaiAvailable] = useState<boolean | null>(null)
 
-  useEffect(() => {
-    const unsub = subscribeToVoiceChanges(setWebVoices)
-    window.api.tts.openaiAvailable().then(setOpenaiAvailable).catch(() => setOpenaiAvailable(false))
-    return unsub
-  }, [])
+  useEffect(() => subscribeToVoiceChanges(setWebVoices), [])
 
   const filteredWebVoices = webVoices.filter((v) => {
     if (webFilter === 'all') return true
@@ -192,7 +433,7 @@ function TtsSettings() {
               }}
               title={
                 disabled
-                  ? 'OpenAI API key not found in C:\\MGT4170\\ClassKeys\\classkey.env'
+                  ? 'Add an OpenAI API key in Settings above to enable neural TTS.'
                   : undefined
               }
             >

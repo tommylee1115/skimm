@@ -1,11 +1,18 @@
 /**
  * Markdown processing pipeline.
  * Raw markdown → mdast → hast → React elements
+ *
+ * Math: `$...$` (inline) and `$$...$$` (block) are parsed by remark-math
+ * into mdast math nodes, lowered to hast by remark-rehype, and rendered
+ * into KaTeX HTML by rehype-katex. KaTeX's stylesheet is imported once
+ * in main.tsx so the fonts and layout rules are available.
  */
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import remarkRehype from 'remark-rehype'
+import rehypeKatex from 'rehype-katex'
 import rehypeReact from 'rehype-react'
 import { createElement, Fragment } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
@@ -26,11 +33,20 @@ export function processMarkdown(
 ): ReactElement {
   const { chunkingLevel, beelineEnabled, onWordClick } = options
 
+  // Order matters:
+  //   remarkMath     — recognise $...$ / $$...$$ in mdast
+  //   remarkChunk    — optional paragraph/clause splitter
+  //   remarkRehype   — lower to hast
+  //   rehypeKatex    — expand math nodes into full KaTeX HTML
+  //   rehypeClickable — wrap words in <span data-word> for clicks+TTS
+  //                    (skips katex subtrees so math spans stay intact)
   const processor = unified()
     .use(remarkParse)
     .use(remarkGfm)
+    .use(remarkMath)
     .use(remarkChunk, { level: chunkingLevel })
     .use(remarkRehype)
+    .use(rehypeKatex)
     .use(rehypeClickable)
 
   if (beelineEnabled) {

@@ -1,18 +1,25 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
+import { app, shell, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { readFile } from 'fs/promises'
 import Store from 'electron-store'
 import { autoUpdater } from 'electron-updater'
 import { aiManager } from './services/ai/ai-manager'
-import type { AIExplanationRequest } from './services/ai/provider.interface'
-import { hasOpenAIKey, loadOpenAIKey } from './services/tts/openai-key'
-import { openAiSynthesize, type OpenAIModel, type OpenAIVoice } from './services/tts/openai-tts.service'
-import { openAiTranscribe } from './services/tts/whisper-transcribe.service'
-import { initDatabase, saveCard, getAllCards, deleteCard, searchCards, type StudyCard } from './services/study-cards'
+import { loadOpenAIKey } from './services/tts/openai-key'
+import { initDatabase } from './services/study-cards'
+import { initLogger, log } from './services/log'
+import { initSecrets, secrets } from './services/secrets'
+import { seedAllowedPathsFromStore } from './services/file-access'
+import { registerAllIpc } from './ipc'
+import { wireAutoUpdaterEvents } from './ipc/update'
 import icon from '../../resources/icon.png?asset'
 
-const store = new Store<{ apiKey?: string; apiProvider?: string }>()
+const store = new Store<{
+  apiKey?: string
+  apiKeyEncrypted?: string
+  apiProvider?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any
+}>()
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -26,7 +33,13 @@ function createWindow(): BrowserWindow {
     titleBarStyle: 'default',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      // Full sandbox: the renderer + preload run in a Chromium sandbox
+      // with no Node runtime. Preload only imports { contextBridge,
+      // ipcRenderer, webUtils } from 'electron', all of which are
+      // sandbox-compatible. A compromised renderer now cannot touch the
+      // filesystem, spawn processes, or reach the OS — only IPC over
+      // the narrow SkimmApi.
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -50,120 +63,8 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
-// IPC Handlers
-function registerIpcHandlers(): void {
-  ipcMain.handle('file:open-dialog', async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openFile'],
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }]
-    })
-    if (result.canceled || result.filePaths.length === 0) return null
-    const filePath = result.filePaths[0]
-    const content = await readFile(filePath, 'utf-8')
-    return { path: filePath, content }
-  })
-
-  ipcMain.handle('file:read', async (_event, filePath: string) => {
-    const content = await readFile(filePath, 'utf-8')
-    return { path: filePath, content }
-  })
-
-  ipcMain.handle('app:version', () => {
-    return app.getVersion()
-  })
-
-  ipcMain.handle('file:open-folder-dialog', async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory']
-    })
-    if (result.canceled || result.filePaths.length === 0) return null
-    return result.filePaths[0]
-  })
-
-  // Settings
-  ipcMain.handle('settings:get', (_event, key: string) => {
-    return store.get(key)
-  })
-
-  ipcMain.handle('settings:set', (_event, key: string, value: unknown) => {
-    store.set(key, value)
-    if (key === 'apiKey' && typeof value === 'string') {
-      aiManager.setApiKey(value)
-    }
-  })
-
-  // AI explain — streams chunks back to renderer
-  ipcMain.handle('ai:explain', async (event, request: AIExplanationRequest) => {
-    const provider = aiManager.getProvider()
-    const textChunks: string[] = []
-
-    for await (const chunk of provider.explain(request)) {
-      if (chunk.type === 'text') {
-        event.sender.send('ai:explain-stream', chunk.text)
-        textChunks.push(chunk.text)
-      } else if (chunk.type === 'usage') {
-        event.sender.send('ai:explain-usage', chunk.usage)
-      }
-    }
-
-    // Signal end of stream
-    event.sender.send('ai:explain-done')
-    return textChunks.join('')
-  })
-
-  // OpenAI TTS
-  ipcMain.handle('tts:openai-available', () => {
-    return hasOpenAIKey()
-  })
-
-  ipcMain.handle(
-    'tts:openai-synthesize',
-    async (
-      _event,
-      text: string,
-      voice: OpenAIVoice,
-      speed: number,
-      model: OpenAIModel
-    ) => {
-      return await openAiSynthesize(text, voice, speed, model)
-    }
-  )
-
-  ipcMain.handle('tts:openai-transcribe', async (_event, audioBase64: string) => {
-    return await openAiTranscribe(audioBase64)
-  })
-
-  // Study cards
-  ipcMain.handle('cards:save', (_event, card: StudyCard) => {
-    saveCard(card)
-  })
-
-  ipcMain.handle('cards:list', () => {
-    return getAllCards()
-  })
-
-  ipcMain.handle('cards:delete', (_event, id: string) => {
-    deleteCard(id)
-  })
-
-  ipcMain.handle('cards:search', (_event, query: string) => {
-    return searchCards(query)
-  })
-
-  ipcMain.handle('update:install', () => {
-    autoUpdater.quitAndInstall()
-  })
-}
-
-app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.skimm.reader')
-
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
-  })
-
-  // Override default menu to prevent Ctrl+W from closing the window
-  const menu = Menu.buildFromTemplate([
+function buildAppMenu(): Menu {
+  return Menu.buildFromTemplate([
     {
       label: 'File',
       submenu: [
@@ -179,9 +80,8 @@ app.whenReady().then(() => {
         {
           label: 'Close Tab',
           accelerator: 'CmdOrCtrl+W',
-          click: () => {
-            // Handled in renderer — do NOT close the window
-          }
+          // Handled in renderer — do NOT close the window here.
+          click: () => {}
         },
         { type: 'separator' },
         { role: 'quit' }
@@ -189,10 +89,7 @@ app.whenReady().then(() => {
     },
     {
       label: 'Edit',
-      submenu: [
-        { role: 'copy' },
-        { role: 'selectAll' }
-      ]
+      submenu: [{ role: 'copy' }, { role: 'selectAll' }]
     },
     {
       label: 'View',
@@ -209,34 +106,68 @@ app.whenReady().then(() => {
     },
     {
       label: 'Window',
-      submenu: [
-        { role: 'minimize' }
-      ]
+      submenu: [{ role: 'minimize' }]
     }
   ])
-  Menu.setApplicationMenu(menu)
+}
 
-  // Initialize SQLite database
+function setupAutoUpdater(mainWindow: BrowserWindow): void {
+  // Production only — dev builds have no update manifest.
+  if (is.dev) return
+
+  autoUpdater.logger = log
+
+  // Per-event logging stays here; the renderer-facing broadcast lives
+  // in wireAutoUpdaterEvents (src/main/ipc/update.ts).
+  autoUpdater.on('checking-for-update', () => log.info('[updater] checking-for-update'))
+  autoUpdater.on('update-available', (info) =>
+    log.info('[updater] update-available', info.version)
+  )
+  autoUpdater.on('update-not-available', () => log.info('[updater] update-not-available'))
+  autoUpdater.on('download-progress', (p) =>
+    log.info(`[updater] download-progress ${p.percent?.toFixed(1)}%`)
+  )
+  autoUpdater.on('update-downloaded', () => {
+    log.info('[updater] update-downloaded — notifying renderer')
+    mainWindow.webContents.send('update:downloaded')
+  })
+  autoUpdater.on('error', (err) => log.error('[updater] error:', err))
+
+  // Broadcast every state change to the renderer so the Settings panel
+  // can reflect live status.
+  wireAutoUpdaterEvents()
+
+  autoUpdater.checkForUpdatesAndNotify()
+}
+
+app.whenReady().then(() => {
+  // Logger first — everything below logs through the rotating file transport.
+  initLogger()
+
+  electronApp.setAppUserModelId('com.skimm.reader')
+
+  app.on('browser-window-created', (_, window) => {
+    optimizer.watchWindowShortcuts(window)
+  })
+
+  Menu.setApplicationMenu(buildAppMenu())
+
+  // Bootstrap services in dependency order: DB → secrets (migrates legacy
+  // plaintext apiKey) → file-access allow-list (seeded from persisted
+  // workspace) → OpenAI key loader → IPC registry.
   initDatabase()
+  initSecrets(store)
+  seedAllowedPathsFromStore(store)
 
-  // Restore API key from settings
-  const savedKey = store.get('apiKey')
+  const savedKey = secrets.getApiKey()
   if (savedKey) aiManager.setApiKey(savedKey)
 
-  // Load OpenAI key for TTS (logs to terminal only — never persisted)
   loadOpenAIKey()
 
-  registerIpcHandlers()
-  const mainWindow = createWindow()
+  registerAllIpc(store)
 
-  // Auto-updater — production only (dev builds have no update manifest)
-  if (!is.dev) {
-    autoUpdater.on('error', (err) => console.error('Auto-updater error:', err))
-    autoUpdater.on('update-downloaded', () => {
-      mainWindow.webContents.send('update:downloaded')
-    })
-    autoUpdater.checkForUpdatesAndNotify()
-  }
+  const mainWindow = createWindow()
+  setupAutoUpdater(mainWindow)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -244,7 +175,5 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  if (process.platform !== 'darwin') app.quit()
 })

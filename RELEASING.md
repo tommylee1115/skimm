@@ -62,9 +62,19 @@ Tiny habit, pays off when you want to remember what shipped. Keep it human-reada
 
 ### 4. Rebuild and publish
 
-```bash
-npm run build && GH_TOKEN=<your-token> npm run package -- --publish always
+**PowerShell 7+** (Windows default):
+```powershell
+$env:GH_TOKEN = gh auth token
+npm run build && npm run package -- --publish always
 ```
+
+**bash / zsh** (Git Bash, WSL, macOS):
+```bash
+GH_TOKEN=$(gh auth token) npm run build && GH_TOKEN=$(gh auth token) npm run package -- --publish always
+```
+
+`gh auth token` reads from the OS keychain (set up once via `gh auth login`)
+so no plaintext `.env` file is required.
 
 This builds the installer **and** pushes it to GitHub Releases automatically.
 New installer lands at `dist/Skimm Setup <version>.exe` locally, and a GitHub
@@ -129,16 +139,26 @@ Auto-updates are live via `electron-updater` + GitHub Releases:
   version is installed and the app relaunches.
 
 **GH_TOKEN** is required only at publish time (your machine), never at runtime.
-Store it in your shell profile or password manager:
-```bash
-# in ~/.bashrc or ~/.zshrc
-export GH_TOKEN=ghp_...
-```
+Use `gh auth login` (one-time) so the token is held by the OS keychain, and
+inject it per-command only when publishing:
 
-Then the release command simplifies to:
-```bash
+```powershell
+# one-time
+gh auth login   # paste a fine-grained PAT scoped to tommylee1115/skimm
+
+# per-release (PowerShell 7+)
+$env:GH_TOKEN = gh auth token
 npm run build && npm run package -- --publish always
 ```
+
+```bash
+# per-release (bash / zsh)
+GH_TOKEN=$(gh auth token) npm run build && GH_TOKEN=$(gh auth token) npm run package -- --publish always
+```
+
+Do **not** store the token in a `.env` file checked into the repo, or in your
+shell profile as a persistent `export`. `gh auth token` pulls it into the
+process env only for the duration of the publish command.
 
 **Caveat:** auto-updater works on Windows without code signing. macOS requires
 signing for auto-updates; skip macOS targets until then.

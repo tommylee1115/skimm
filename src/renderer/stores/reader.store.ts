@@ -54,16 +54,17 @@ export const useReaderStore = create<ReaderStore>((set) => ({
   _loaded: false,
 
   loadSettings: async () => {
+    // One IPC round-trip for all reader.* keys instead of N sequential reads.
+    const ipcKeys = PERSISTED_KEYS.map((k) => `reader.${k}`)
+    const raw = await window.api.settings.getMany(ipcKeys)
+
     const settings: Record<string, unknown> = {}
     for (const key of PERSISTED_KEYS) {
-      const val = await window.api.settings.get(`reader.${key}`)
-      if (val !== undefined && val !== null) {
-        settings[key] = val
-      }
+      const val = raw[`reader.${key}`]
+      if (val !== undefined && val !== null) settings[key] = val
     }
     if (Object.keys(settings).length > 0) {
       set(settings as Partial<ReaderStore>)
-      // Apply theme
       if (settings.theme) {
         document.documentElement.setAttribute('data-theme', settings.theme as string)
       }

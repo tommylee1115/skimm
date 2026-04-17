@@ -1,4 +1,4 @@
-import { Play, Pause, Square, Loader2, AlertCircle } from 'lucide-react'
+import { Play, Pause, Square, Loader2, AlertCircle, X } from 'lucide-react'
 import { useTtsStore, getTtsController } from '@/stores/tts.store'
 
 const SPEED_OPTIONS = [0.75, 1.0, 1.25, 1.5, 2.0]
@@ -8,6 +8,7 @@ export function TtsTransport() {
   const isPlaying = useTtsStore((s) => s.isPlaying)
   const isLoading = useTtsStore((s) => s.isLoading)
   const errorMessage = useTtsStore((s) => s.errorMessage)
+  const setError = useTtsStore((s) => s.setError)
   const playbackSpeed = useTtsStore((s) => s.playbackSpeed)
   const setSpeed = useTtsStore((s) => s.setSpeed)
 
@@ -42,7 +43,7 @@ export function TtsTransport() {
           boxShadow: '0 10px 40px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.04)'
         }}
       >
-        {/* Error banner */}
+        {/* Error banner — dismissable. Retry is via the Play button. */}
         {errorMessage && (
           <div
             className="flex items-center gap-2 px-4 py-2 text-[12px] rounded-t-2xl"
@@ -55,6 +56,23 @@ export function TtsTransport() {
           >
             <AlertCircle size={14} />
             <span className="flex-1">{errorMessage}</span>
+            <button
+              className="w-5 h-5 flex items-center justify-center rounded cursor-pointer transition-colors"
+              style={{ color: '#e57373', opacity: 0.8 }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(220, 80, 80, 0.2)'
+                e.currentTarget.style.opacity = '1'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.opacity = '0.8'
+              }}
+              onClick={() => setError(null)}
+              title="Dismiss error"
+              aria-label="Dismiss TTS error"
+            >
+              <X size={12} />
+            </button>
           </div>
         )}
 
@@ -71,6 +89,7 @@ export function TtsTransport() {
             }}
             onClick={handleStop}
             title="Stop (Esc)"
+            aria-label="Stop reading"
           >
             <Square size={14} />
           </button>
@@ -85,6 +104,7 @@ export function TtsTransport() {
             onClick={handlePlayPause}
             disabled={isLoading}
             title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {isLoading ? (
               <Loader2 size={16} className="animate-spin" />
@@ -105,6 +125,7 @@ export function TtsTransport() {
             className="text-[11px] bg-transparent outline-none cursor-pointer"
             style={{ color: 'var(--text-secondary)' }}
             title="Speed"
+            aria-label="Playback speed"
           >
             {SPEED_OPTIONS.map((s) => (
               <option key={s} value={s} style={{ background: 'var(--bg-primary)' }}>

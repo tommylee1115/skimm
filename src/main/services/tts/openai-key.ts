@@ -1,25 +1,33 @@
 import { readFileSync, existsSync } from 'fs'
+import { secrets } from '../secrets'
 
 /**
- * Where Skimm looks for an OpenAI API key. Read once at startup, cached in
- * memory, never persisted to electron-store, never logged.
+ * Lookup order (first match wins):
+ *   1. User-provided key saved via Settings → safeStorage-encrypted on disk
+ *   2. `OPENAI_API_KEY` environment variable
+ *   3. `C:\MGT4170\ClassKeys\classkey.env` — classroom-shared fallback
+ *
+ * The classroom path exists for the original course cohort and is bundled
+ * into the build only by convention — it will be removed once every user
+ * of Skimm outside that classroom has provided their own key via Settings.
+ *
+ * Values are never persisted anywhere outside the encrypted secrets store
+ * and are never logged. The classroom-file path is cached after first read
+ * for perf (avoids a disk hit per TTS call); the user-key path re-reads
+ * from the secrets store every time so Settings changes take effect
+ * immediately without a restart.
  */
-const KEY_FILE_PATH = 'C:\\MGT4170\\ClassKeys\\classkey.env'
+const CLASSROOM_KEY_FILE_PATH = 'C:\\MGT4170\\ClassKeys\\classkey.env'
 
-let cachedKey: string | null = null
-let loaded = false
+let classroomKeyCache: string | null = null
+let classroomKeyChecked = false
 
-/**
- * Parse a dotenv-style line for OPENAI_API_KEY=... (quoted or unquoted).
- * Does not parse the whole env format — we only need this one key.
- */
 function parseKey(contents: string): string | null {
   const lines = contents.split(/\r?\n/)
   for (const line of lines) {
     const match = line.match(/^\s*OPENAI_API_KEY\s*=\s*(.+?)\s*$/)
     if (!match) continue
     let value = match[1]
-    // Strip surrounding quotes if present
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))
@@ -31,40 +39,55 @@ function parseKey(contents: string): string | null {
   return null
 }
 
-/**
- * Load the OpenAI API key from the env file (or process.env as a fallback).
- * Idempotent — only reads the file once per app run.
- */
-export function loadOpenAIKey(): string | null {
-  if (loaded) return cachedKey
-  loaded = true
-
-  // 1. Check process.env first (lets users override without touching the file)
-  if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.length > 0) {
-    cachedKey = process.env.OPENAI_API_KEY
-    console.log('[OpenAI] key loaded from process.env')
-    return cachedKey
-  }
-
-  // 2. Fall back to the hardcoded classkey.env path
+function loadClassroomKey(): string | null {
+  if (classroomKeyChecked) return classroomKeyCache
+  classroomKeyChecked = true
   try {
-    if (!existsSync(KEY_FILE_PATH)) {
-      console.log(`[OpenAI] no key file at ${KEY_FILE_PATH}`)
+    if (!existsSync(CLASSROOM_KEY_FILE_PATH)) {
+      console.log(`[OpenAI] no classroom key file at ${CLASSROOM_KEY_FILE_PATH}`)
+      classroomKeyCache = null
       return null
     }
-    const contents = readFileSync(KEY_FILE_PATH, 'utf-8')
+    const contents = readFileSync(CLASSROOM_KEY_FILE_PATH, 'utf-8')
     const key = parseKey(contents)
     if (!key) {
-      console.warn(`[OpenAI] key file present but OPENAI_API_KEY not found`)
+      console.warn('[OpenAI] classroom key file present but OPENAI_API_KEY not found')
+      classroomKeyCache = null
       return null
     }
-    cachedKey = key
-    console.log(`[OpenAI] key loaded from ${KEY_FILE_PATH} (${key.length} chars)`)
-    return cachedKey
+    classroomKeyCache = key
+    console.log(
+      `[OpenAI] classroom key loaded from ${CLASSROOM_KEY_FILE_PATH} (${key.length} chars)`
+    )
+    return classroomKeyCache
   } catch (err) {
-    console.error('[OpenAI] failed to read key file:', err instanceof Error ? err.message : err)
+    console.error(
+      '[OpenAI] failed to read classroom key file:',
+      err instanceof Error ? err.message : err
+    )
+    classroomKeyCache = null
     return null
   }
+}
+
+/**
+ * Resolve the OpenAI API key for the current TTS / Whisper call. Returns
+ * `null` if none of the three sources produced one — the renderer then
+ * falls back to Web Speech.
+ */
+export function loadOpenAIKey(): string | null {
+  // 1. User-provided (Settings → OpenAI API Key). Re-read every call so
+  //    Save/Remove in Settings takes effect without a restart.
+  const userKey = secrets.getOpenaiKey()
+  if (userKey && userKey.length > 0) return userKey
+
+  // 2. Environment variable — for developers / power users.
+  if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.length > 0) {
+    return process.env.OPENAI_API_KEY
+  }
+
+  // 3. Classroom-shared file. Cached after first read.
+  return loadClassroomKey()
 }
 
 export function hasOpenAIKey(): boolean {

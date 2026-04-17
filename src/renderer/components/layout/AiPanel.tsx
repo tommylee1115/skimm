@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAiStore, type Explanation } from '@/stores/ai.store'
-import { Bookmark, Check, Loader2, Trash2, Minus, Plus, X } from 'lucide-react'
+import { Bookmark, Check, Loader2, Trash2, Minus, Plus, X, Square } from 'lucide-react'
 import { MarkdownText } from '@/components/ai/MarkdownText'
 
 interface AiPanelProps {
@@ -27,7 +27,8 @@ export function AiPanel({ open, width }: AiPanelProps) {
     isLoading,
     selectedText,
     clearHistory,
-    togglePanel
+    togglePanel,
+    cancelExplanation
   } = useAiStore()
 
   if (!open) return null
@@ -105,10 +106,36 @@ export function AiPanel({ open, width }: AiPanelProps) {
       <div className="flex-1 overflow-y-auto" style={{ fontSize: panelFontSize }}>
         {/* Currently streaming explanation */}
         {isLoading && (
-          <div className="px-4 py-4 mx-3 my-2 rounded-lg" style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-secondary)' }}>
-            <div className="flex items-center gap-2 mb-3">
+          <div
+            className="px-4 py-4 mx-3 my-2 rounded-lg relative"
+            style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-secondary)' }}
+          >
+            <button
+              className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded cursor-pointer transition-colors"
+              style={{
+                color: 'var(--text-muted)',
+                background: 'transparent',
+                border: '1px solid var(--border-secondary)',
+                fontSize: 11
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--bg-tertiary)'
+                e.currentTarget.style.color = 'var(--text-primary)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.color = 'var(--text-muted)'
+              }}
+              onClick={cancelExplanation}
+              title="Cancel (Esc)"
+              aria-label="Cancel explanation"
+            >
+              <Square size={10} fill="currentColor" />
+              Stop
+            </button>
+            <div className="flex items-center gap-2 mb-3 pr-16">
               <Loader2 size={14} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
-              <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+              <span className="font-medium truncate" style={{ color: 'var(--text-primary)' }}>
                 "{selectedText}"
               </span>
             </div>

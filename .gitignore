@@ -1,0 +1,14 @@
+node_modules/
+out/
+build/
+dist/
+.env
+*.local
+.DS_Store
+Thumbs.db
+
+# TypeScript incremental build info — regenerated on every typecheck run
+*.tsbuildinfo
+
+# Nanobanana-generated brand assets — experimentation outputs, not source
+nanobanana-output/

@@ -38,10 +38,22 @@ export function IconBar({ activeView, onViewChange, sidebarOpen, onToggleSidebar
         borderColor: 'var(--border-primary)'
       }}
     >
-      <button className={iconClass('files')} onClick={() => handleClick('files')} title="Files">
+      <button
+        className={iconClass('files')}
+        onClick={() => handleClick('files')}
+        title="Files"
+        aria-label="Files"
+        aria-pressed={activeView === 'files' && sidebarOpen}
+      >
         <Files size={20} />
       </button>
-      <button className={iconClass('study')} onClick={() => handleClick('study')} title="Study Cards">
+      <button
+        className={iconClass('study')}
+        onClick={() => handleClick('study')}
+        title="Study Cards"
+        aria-label="Study Cards"
+        aria-pressed={activeView === 'study' && sidebarOpen}
+      >
         <BookOpen size={20} />
       </button>
 
@@ -51,6 +63,7 @@ export function IconBar({ activeView, onViewChange, sidebarOpen, onToggleSidebar
         className="flex items-center justify-center w-10 h-10 rounded-md cursor-pointer transition-colors text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
         onClick={toggleTheme}
         title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
+        aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
       >
         {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
       </button>
@@ -58,6 +71,8 @@ export function IconBar({ activeView, onViewChange, sidebarOpen, onToggleSidebar
         className={iconClass('settings')}
         onClick={() => handleClick('settings')}
         title="Settings"
+        aria-label="Settings"
+        aria-pressed={activeView === 'settings' && sidebarOpen}
       >
         <Settings size={20} />
       </button>

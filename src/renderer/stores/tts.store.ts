@@ -1,23 +1,22 @@
 import { create } from 'zustand'
+import type { OpenAIVoice, OpenAIModel, TtsProvider } from '@shared/tts.types'
 
-// Mirror of the preload types. Kept inline so the renderer's tsconfig
-// doesn't need to cross into src/preload.
-export type OpenAIVoice =
-  | 'alloy'
-  | 'ash'
-  | 'ballad'
-  | 'coral'
-  | 'echo'
-  | 'fable'
-  | 'onyx'
-  | 'nova'
-  | 'sage'
-  | 'shimmer'
-  | 'verse'
+// Re-exports let existing imports from '@/stores/tts.store' keep working.
+export type { OpenAIVoice, OpenAIModel, TtsProvider }
 
-export type OpenAIModel = 'tts-1' | 'tts-1-hd' | 'gpt-4o-mini-tts'
-
-export type TtsProvider = 'openai' | 'web-speech'
+/**
+ * Per-document TTS overrides. When the user changes speed/voice/provider
+ * while a file is the active tab, those choices are remembered for that
+ * file and restored automatically on return. Falls back to the global
+ * defaults if no entry exists for the active file.
+ */
+export interface PerDocTts {
+  speed?: number
+  selectedVoice?: string
+  openaiVoice?: OpenAIVoice
+  openaiModel?: OpenAIModel
+  provider?: TtsProvider
+}
 
 interface TtsStore {
   // Visibility + state
@@ -33,6 +32,10 @@ interface TtsStore {
   openaiVoice: OpenAIVoice    // OpenAI voice id  (when provider = openai)
   openaiModel: OpenAIModel    // OpenAI model id  (when provider = openai)
   whisperSyncEnabled: boolean // OpenAI: use Whisper for accurate word timing
+
+  // Per-document memory
+  activeFilePath: string | null
+  perDoc: Record<string, PerDocTts>
 
   // Playback state
   currentWordIndex: number    // -1 if no active word
@@ -54,6 +57,9 @@ interface TtsStore {
   setCurrentWordIndex: (idx: number) => void
   setTotalWords: (n: number) => void
   setTime: (currentMs: number, durationMs: number) => void
+  /** Switch active file. Hydrates settings from perDoc[path] if it exists;
+   *  otherwise leaves current settings untouched. */
+  setActiveFilePath: (path: string | null) => void
   loadSettings: () => Promise<void>
 }
 
@@ -97,7 +103,28 @@ export function getTtsController(): TtsController | null {
   return controller
 }
 
-export const useTtsStore = create<TtsStore>((set) => ({
+// Module-scoped flag so setters can tell "user changed the slider" from
+// "perDoc hydration applied this value automatically." Only the former
+// should write back to perDoc. Prevents a feedback loop.
+let hydratingPerDoc = false
+
+/** Merge a patch into perDoc[activeFilePath] and persist. No-op when no
+ *  file is active (e.g. welcome screen). */
+function writePerDoc(
+  get: () => TtsStore,
+  set: (partial: Partial<TtsStore>) => void,
+  patch: Partial<PerDocTts>
+): void {
+  const state = get()
+  const path = state.activeFilePath
+  if (!path) return
+  const nextEntry: PerDocTts = { ...(state.perDoc[path] ?? {}), ...patch }
+  const nextPerDoc = { ...state.perDoc, [path]: nextEntry }
+  set({ perDoc: nextPerDoc })
+  window.api.settings.set('tts.perDoc', nextPerDoc)
+}
+
+export const useTtsStore = create<TtsStore>((set, get) => ({
   transportVisible: false,
   isPlaying: false,
   isLoading: false,
@@ -108,6 +135,8 @@ export const useTtsStore = create<TtsStore>((set) => ({
   openaiVoice: DEFAULT_OPENAI_VOICE,
   openaiModel: DEFAULT_OPENAI_MODEL,
   whisperSyncEnabled: true,
+  activeFilePath: null,
+  perDoc: {},
   currentWordIndex: -1,
   totalWords: 0,
   currentTimeMs: 0,
@@ -121,49 +150,95 @@ export const useTtsStore = create<TtsStore>((set) => ({
   setSpeed: (playbackSpeed) => {
     const clamped = Math.max(0.5, Math.min(2.0, playbackSpeed))
     set({ playbackSpeed: clamped })
-    window.api.settings.set('tts.speed', clamped)
+    if (!hydratingPerDoc) {
+      window.api.settings.set('tts.speed', clamped)
+      writePerDoc(get, set, { speed: clamped })
+    }
   },
 
   setProvider: (ttsProvider) => {
     set({ ttsProvider })
-    window.api.settings.set('tts.provider', ttsProvider)
+    if (!hydratingPerDoc) {
+      window.api.settings.set('tts.provider', ttsProvider)
+      writePerDoc(get, set, { provider: ttsProvider })
+    }
   },
 
   setVoice: (selectedVoice) => {
     set({ selectedVoice })
-    window.api.settings.set('tts.voice', selectedVoice)
+    if (!hydratingPerDoc) {
+      window.api.settings.set('tts.voice', selectedVoice)
+      writePerDoc(get, set, { selectedVoice })
+    }
   },
 
   setOpenaiVoice: (openaiVoice) => {
     set({ openaiVoice })
-    window.api.settings.set('tts.openaiVoice', openaiVoice)
+    if (!hydratingPerDoc) {
+      window.api.settings.set('tts.openaiVoice', openaiVoice)
+      writePerDoc(get, set, { openaiVoice })
+    }
   },
 
   setOpenaiModel: (openaiModel) => {
     set({ openaiModel })
-    window.api.settings.set('tts.openaiModel', openaiModel)
+    if (!hydratingPerDoc) {
+      window.api.settings.set('tts.openaiModel', openaiModel)
+      writePerDoc(get, set, { openaiModel })
+    }
   },
 
   setWhisperSyncEnabled: (whisperSyncEnabled) => {
     set({ whisperSyncEnabled })
-    window.api.settings.set('tts.whisperSyncEnabled', whisperSyncEnabled)
+    if (!hydratingPerDoc) {
+      window.api.settings.set('tts.whisperSyncEnabled', whisperSyncEnabled)
+    }
   },
 
   setCurrentWordIndex: (currentWordIndex) => set({ currentWordIndex }),
   setTotalWords: (totalWords) => set({ totalWords }),
   setTime: (currentTimeMs, durationMs) => set({ currentTimeMs, durationMs }),
 
+  setActiveFilePath: (path) => {
+    set({ activeFilePath: path })
+    if (!path) return
+    const entry = get().perDoc[path]
+    if (!entry) return
+    // Apply per-doc overrides without re-persisting them back.
+    hydratingPerDoc = true
+    try {
+      if (typeof entry.speed === 'number') get().setSpeed(entry.speed)
+      if (entry.provider) get().setProvider(entry.provider)
+      if (entry.selectedVoice !== undefined) get().setVoice(entry.selectedVoice)
+      if (entry.openaiVoice) get().setOpenaiVoice(entry.openaiVoice)
+      if (entry.openaiModel) get().setOpenaiModel(entry.openaiModel)
+    } finally {
+      hydratingPerDoc = false
+    }
+  },
+
   loadSettings: async () => {
-    const [voice, speed, provider, openaiVoice, openaiModel, whisperSync, openaiAvailable] =
-      await Promise.all([
-        window.api.settings.get('tts.voice'),
-        window.api.settings.get('tts.speed'),
-        window.api.settings.get('tts.provider'),
-        window.api.settings.get('tts.openaiVoice'),
-        window.api.settings.get('tts.openaiModel'),
-        window.api.settings.get('tts.whisperSyncEnabled'),
-        window.api.tts.openaiAvailable()
-      ])
+    // One IPC round-trip for all tts.* keys; openaiAvailable stays separate
+    // because it runs a filesystem check, not a store lookup.
+    const [persisted, openaiAvailable] = await Promise.all([
+      window.api.settings.getMany([
+        'tts.voice',
+        'tts.speed',
+        'tts.provider',
+        'tts.openaiVoice',
+        'tts.openaiModel',
+        'tts.whisperSyncEnabled',
+        'tts.perDoc'
+      ]),
+      window.api.tts.openaiAvailable()
+    ])
+    const voice = persisted['tts.voice']
+    const speed = persisted['tts.speed']
+    const provider = persisted['tts.provider']
+    const openaiVoice = persisted['tts.openaiVoice']
+    const openaiModel = persisted['tts.openaiModel']
+    const whisperSync = persisted['tts.whisperSyncEnabled']
+    const perDocRaw = persisted['tts.perDoc']
 
     const isDiscarded =
       typeof voice === 'string' &&
@@ -195,13 +270,19 @@ export const useTtsStore = create<TtsStore>((set) => ({
         ? (openaiModel as OpenAIModel)
         : DEFAULT_OPENAI_MODEL
 
+    const perDoc: Record<string, PerDocTts> =
+      perDocRaw && typeof perDocRaw === 'object' && !Array.isArray(perDocRaw)
+        ? (perDocRaw as Record<string, PerDocTts>)
+        : {}
+
     set({
       selectedVoice: usableWebVoice,
       playbackSpeed: typeof speed === 'number' ? speed : 1.0,
       ttsProvider: finalProvider,
       openaiVoice: resolvedOpenaiVoice,
       openaiModel: resolvedOpenaiModel,
-      whisperSyncEnabled: typeof whisperSync === 'boolean' ? whisperSync : true
+      whisperSyncEnabled: typeof whisperSync === 'boolean' ? whisperSync : true,
+      perDoc
     })
   }
 }))

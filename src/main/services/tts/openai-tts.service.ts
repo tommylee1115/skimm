@@ -1,26 +1,8 @@
 import { loadOpenAIKey } from './openai-key'
+import type { OpenAIVoice, OpenAIModel, OpenAiSynthesisResult } from '../../../shared/tts.types'
 
-export type OpenAIVoice =
-  | 'alloy'
-  | 'ash'
-  | 'ballad'
-  | 'coral'
-  | 'echo'
-  | 'fable'
-  | 'onyx'
-  | 'nova'
-  | 'sage'
-  | 'shimmer'
-  | 'verse'
-
-export type OpenAIModel = 'tts-1' | 'tts-1-hd' | 'gpt-4o-mini-tts'
-
-export interface OpenAiSynthesisResult {
-  audioBase64: string
-  mimeType: 'audio/mpeg'
-  /** Bytes of the MP3 — useful as a rough duration hint (not exact). */
-  bytes: number
-}
+// Re-exports preserved for back-compat with existing main-side imports.
+export type { OpenAIVoice, OpenAIModel, OpenAiSynthesisResult }
 
 const OPENAI_TTS_ENDPOINT = 'https://api.openai.com/v1/audio/speech'
 
@@ -62,7 +44,10 @@ export async function openAiSynthesize(
       input: text,
       response_format: 'mp3',
       speed: clampedSpeed
-    })
+    }),
+    // Hard 30s timeout. A hung OpenAI request leaves the renderer stuck
+    // on "loading" forever without this.
+    signal: AbortSignal.timeout(30_000)
   })
 
   if (!resp.ok) {

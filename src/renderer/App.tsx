@@ -6,6 +6,7 @@ import { MainPane } from '@/components/layout/MainPane'
 import { AiPanel } from '@/components/layout/AiPanel'
 import { DragDropOverlay } from '@/components/layout/DragDropOverlay'
 import { UpdateBanner } from '@/components/layout/UpdateBanner'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useFileStore } from '@/stores/file.store'
 import { useReaderStore } from '@/stores/reader.store'
 import { useAiStore } from '@/stores/ai.store'
@@ -40,6 +41,20 @@ export default function App() {
     window.api.settings.get('ai.panelFontSize').then((size) => {
       if (typeof size === 'number') useAiStore.getState().setPanelFontSize(size)
     })
+  }, [])
+
+  // Bridge file-store active tab into the TTS store so per-document TTS
+  // overrides (speed/voice/provider remembered per file) can hydrate on
+  // tab switch. Subscribe once at mount.
+  useEffect(() => {
+    const syncActivePath = (): void => {
+      const { activeFileId, openFiles } = useFileStore.getState()
+      const path = openFiles.find((f) => f.id === activeFileId)?.path ?? null
+      useTtsStore.getState().setActiveFilePath(path)
+    }
+    // Apply once (handles restored session) and subscribe for changes.
+    syncActivePath()
+    return useFileStore.subscribe(syncActivePath)
   }, [])
 
   // Drag and drop handler
@@ -97,12 +112,18 @@ export default function App() {
       <Sidebar view={sidebarView} open={sidebarOpen} width={sidebarWidth} />
       {sidebarOpen && <ResizeHandle onResize={handleSidebarResize} />}
 
-      {/* Center reading pane */}
-      <MainPane />
+      {/* Center reading pane — wrapped in an error boundary so a crash in
+          the markdown pipeline or TTS DOM walker can't blank the window. */}
+      <ErrorBoundary label="Reading pane">
+        <MainPane />
+      </ErrorBoundary>
 
-      {/* Right AI panel */}
+      {/* Right AI panel — same protection. An error in the streaming
+          explanation renderer stays contained. */}
       {aiPanelOpen && <ResizeHandle onResize={handleAiPanelResize} />}
-      <AiPanel open={aiPanelOpen} width={aiPanelWidth} />
+      <ErrorBoundary label="Explain panel">
+        <AiPanel open={aiPanelOpen} width={aiPanelWidth} />
+      </ErrorBoundary>
 
       {/* Cherry blossom drag & drop overlay */}
       <DragDropOverlay />

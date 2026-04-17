@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from 'react'
+import { useRef, useCallback } from 'react'
 import { useFileStore } from '@/stores/file.store'
 import { useReaderStore } from '@/stores/reader.store'
 import { useAiStore } from '@/stores/ai.store'
@@ -8,6 +8,8 @@ import { useLineFocus, getFocusController } from '@/hooks/useLineFocus'
 import { useTts } from '@/hooks/useTts'
 import { ReadingToolbar } from '@/components/reader/ReadingToolbar'
 import { TtsTransport } from '@/components/tts/TtsTransport'
+import { ExplainPopover } from '@/components/ai/ExplainPopover'
+import { displayNameForTab } from '@/lib/path-utils'
 import { FileText, FolderOpen } from 'lucide-react'
 import skimmIcon from '@/assets/brand/skimm_icon_512.png'
 import skimmWordmark from '@/assets/brand/skimm_wordmark.svg'
@@ -64,36 +66,10 @@ export function MainPane() {
   // Line focus — dims all blocks except the focused one
   useLineFocus(markdownRef)
 
-  // Auto-explain on text selection release (drag and release)
-  useEffect(() => {
-    const area = readingAreaRef.current
-    if (!area) return
-
-    const handleMouseUp = () => {
-      // Skip AI explain if TTS is actively playing — drags during playback are awkward
-      if (useTtsStore.getState().isPlaying) return
-
-      // Small delay to let browser finalize the selection
-      setTimeout(() => {
-        const selection = window.getSelection()
-        const selectedText = selection?.toString().trim()
-        if (selectedText && selectedText.length > 1) {
-          const range = selection?.getRangeAt(0)
-          const container = range?.commonAncestorContainer
-          const parentEl = container instanceof HTMLElement
-            ? container
-            : container?.parentElement
-          const context = parentEl?.closest('p, div, blockquote, li')?.textContent ?? ''
-          const fullDocument = activeFile?.content ?? ''
-          const sourceFile = activeFile?.name ?? ''
-          useAiStore.getState().requestExplanation(selectedText, context, fullDocument, sourceFile)
-        }
-      }, 50)
-    }
-
-    area.addEventListener('mouseup', handleMouseUp)
-    return () => area.removeEventListener('mouseup', handleMouseUp)
-  }, [activeFile])
+  // Text-selection explanations are now gated through <ExplainPopover />:
+  // selection appears → floating Explain button → one explicit click to
+  // spend API tokens. The previous auto-fire on mouseup billed a Claude
+  // call on every accidental drag-select, so it was removed.
 
   const handleOpenFile = async () => {
     const result = await window.api.file.openDialog()
@@ -161,7 +137,18 @@ export function MainPane() {
         }}
       >
         {openFiles.map((file) => (
-          <TabItem key={file.id} file={file} isActive={file.id === activeFileId} />
+          <TabItem
+            key={file.id}
+            file={file}
+            isActive={file.id === activeFileId}
+            // Disambiguate basename collisions — if two open tabs share
+            // the same filename, append the parent folder so the user
+            // can tell them apart.
+            label={displayNameForTab(
+              file.path,
+              openFiles.map((f) => f.path)
+            )}
+          />
         ))}
       </div>
 
@@ -205,16 +192,22 @@ export function MainPane() {
 
       {/* Floating TTS transport bar */}
       <TtsTransport />
+
+      {/* Selection → explicit Explain popover. Anchors to the selection
+          rect (never the mouse), one click to confirm the AI call. */}
+      <ExplainPopover />
     </div>
   )
 }
 
 function TabItem({
   file,
-  isActive
+  isActive,
+  label
 }: {
-  file: { id: string; name: string }
+  file: { id: string; name: string; path: string }
   isActive: boolean
+  label: string
 }) {
   const { setActiveFile, closeFile } = useFileStore()
 
@@ -231,10 +224,10 @@ function TabItem({
         borderBottom: isActive ? '2px solid var(--accent-primary)' : '2px solid transparent'
       }}
       onClick={() => setActiveFile(file.id)}
-      title={file.name}
+      title={file.path}
     >
       <FileText size={14} strokeWidth={1.5} style={{ flexShrink: 0 }} />
-      <span className="truncate">{file.name}</span>
+      <span className="truncate">{label}</span>
       <button
         className="ml-1 rounded w-5 h-5 flex items-center justify-center text-[11px] transition-colors"
         style={{ color: 'var(--text-tertiary)' }}
@@ -250,6 +243,8 @@ function TabItem({
           e.stopPropagation()
           closeFile(file.id)
         }}
+        title={`Close ${label}`}
+        aria-label={`Close ${label}`}
       >
         ×
       </button>

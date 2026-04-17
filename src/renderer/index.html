@@ -3,6 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Defense-in-depth Content Security Policy. Skimm doesn't render raw HTML
+      from user markdown (remark-rehype drops html nodes by default) so this
+      is belt-and-braces, not a fix for a live XSS. script-src 'self' blocks
+      any future inline <script> from executing. unsafe-inline on style is
+      required by Tailwind + the inline `style` props throughout the UI.
+      TTS audio is delivered as data: URLs; brand assets use data: for a
+      couple of SVGs — both origins allow-listed. External connect is
+      restricted to the two APIs we actually call from the renderer (via
+      main-process fetch the renderer doesn't hit these directly, but the
+      CSP still covers any future direct call).
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://api.anthropic.com https://api.openai.com; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none';"
+    />
     <title>Skimm</title>
     <link rel="icon" type="image/png" href="./assets/brand/skimm_icon_512.png" />
   </head>

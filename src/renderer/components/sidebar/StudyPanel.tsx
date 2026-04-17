@@ -2,17 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Trash2, Search } from 'lucide-react'
 import { MarkdownText } from '@/components/ai/MarkdownText'
 import { StudyCardModal } from './StudyCardModal'
-// StudyCardData type matches what window.api.cards returns
-interface StudyCardData {
-  id: string
-  selected_text: string
-  selection_type: 'word' | 'phrase' | 'sentence'
-  explanation: string
-  language: string
-  context: string
-  source_file: string
-  saved_at: string
-}
+import type { StudyCard as StudyCardData } from '@shared/study.types'
 
 export function StudyPanel() {
   const [cards, setCards] = useState<StudyCardData[]>([])

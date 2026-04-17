@@ -15,7 +15,10 @@ export class ClaudeProvider implements AIProvider {
     this.client = new Anthropic({ apiKey: key })
   }
 
-  async *explain(request: AIExplanationRequest): AsyncGenerator<AIExplainChunk, void, unknown> {
+  async *explain(
+    request: AIExplanationRequest,
+    signal?: AbortSignal
+  ): AsyncGenerator<AIExplainChunk, void, unknown> {
     if (!this.client) {
       yield { type: 'text', text: 'Error: No API key configured. Go to Settings to add your Claude API key.' }
       return
@@ -51,19 +54,30 @@ ${context}
 ## Selected text to explain
 "${text}"`
 
+    // Combine the caller's cancel signal with a 30s hard timeout. Either
+    // one firing tears the stream down via the SDK's AbortSignal plumbing.
+    const timeout = AbortSignal.timeout(30_000)
+    const combinedSignal = signal ? AbortSignal.any([signal, timeout]) : timeout
+
     try {
-      const stream = this.client.messages.stream({
-        model: MODEL_ID,
-        max_tokens: Math.min(400, Math.max(150, text.length * 2)),
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }]
-      })
+      const stream = this.client.messages.stream(
+        {
+          model: MODEL_ID,
+          max_tokens: Math.min(400, Math.max(150, text.length * 2)),
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }]
+        },
+        { signal: combinedSignal }
+      )
 
       for await (const event of stream) {
+        if (combinedSignal.aborted) return
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
           yield { type: 'text', text: event.delta.text }
         }
       }
+
+      if (combinedSignal.aborted) return
 
       // After streaming completes, surface the token usage so the renderer
       // can show per-card cost in the Explain panel.
@@ -79,6 +93,18 @@ ${context}
         usage: { inputTokens, outputTokens, model: MODEL_ID, costUsd }
       }
     } catch (err) {
+      // Clean user-cancel — swallow without surfacing an error message.
+      if (signal?.aborted) return
+      const name = err instanceof Error ? err.name : ''
+      if (name === 'APIUserAbortError' || name === 'AbortError') return
+      // Timeout surfaces as a TimeoutError (TimeoutError on AbortSignal.timeout).
+      if (name === 'TimeoutError' || combinedSignal.aborted) {
+        yield {
+          type: 'text',
+          text: 'Error: request timed out after 30 seconds. Check your network and retry.'
+        }
+        return
+      }
       const msg = err instanceof Error ? err.message : String(err)
       yield { type: 'text', text: `Error: ${msg}` }
     }
