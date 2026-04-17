@@ -29,20 +29,6 @@
 
 <br />
 
-## Quickstart
-
-```bash
-npm install
-npm run dev
-```
-
-## Build
-
-```bash
-npm run package    # Windows installer
-npm run ship       # tag, build, release
-```
-
 ---
 
 <p align="center">
